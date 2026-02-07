@@ -1,0 +1,303 @@
+﻿@page "/"
+@inject HttpClient Http
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+
+</style>
+
+<div class="budget-app">
+    <!-- Header -->
+    <header class="app-header">
+        <div class="app-logo">
+            <div class="logo-icon">B</div>
+            <span class="logo-text">BudgetAI</span>
+        </div>
+        <div class="header-controls">
+            <div class="year-selector">
+                <label>Year</label>
+                <input type="number" class="year-input" @bind="_year" />
+            </div>
+            <button class="btn-refresh" @onclick="Load">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
+                Refresh
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-layout">
+        <!-- Left: Pivot Grid -->
+        <div class="table-section">
+            <div class="section-header">
+                <span class="section-title">Budget Overview</span>
+                @if (_rows is not null)
+                {
+                    <span class="record-count">@_rows.Count @(_rows.Count == 1 ? "category" : "categories")</span>
+                }
+            </div>
+
+            <div class="table-container">
+                @if (_rows is null)
+                {
+                    <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <div class="loading-text">Loading budget data&hellip;</div>
+                    </div>
+                }
+                else if (_rows.Count == 0)
+                {
+                    <div class="empty-state">
+                        <div class="empty-icon">📊</div>
+                        <div class="empty-title">No budget data yet</div>
+                        <div class="empty-desc">Use the chat to create your first category and allocate budgets.</div>
+                    </div>
+                }
+                else
+                {
+                    <div style="overflow-x:auto;">
+                        <table class="pivot-table">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Jan</th>
+                                    <th>Feb</th>
+                                    <th>Mar</th>
+                                    <th>Apr</th>
+                                    <th>May</th>
+                                    <th>Jun</th>
+                                    <th>Jul</th>
+                                    <th>Aug</th>
+                                    <th>Sep</th>
+                                    <th>Oct</th>
+                                    <th>Nov</th>
+                                    <th>Dec</th>
+                                    <th class="total-col">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in _rows)
+                                {
+                                    <tr>
+                                        <td>@r.Category</td>
+                                        <td class="@MonthClass(r.January)">@Fmt(r.January)</td>
+                                        <td class="@MonthClass(r.February)">@Fmt(r.February)</td>
+                                        <td class="@MonthClass(r.March)">@Fmt(r.March)</td>
+                                        <td class="@MonthClass(r.April)">@Fmt(r.April)</td>
+                                        <td class="@MonthClass(r.May)">@Fmt(r.May)</td>
+                                        <td class="@MonthClass(r.June)">@Fmt(r.June)</td>
+                                        <td class="@MonthClass(r.July)">@Fmt(r.July)</td>
+                                        <td class="@MonthClass(r.August)">@Fmt(r.August)</td>
+                                        <td class="@MonthClass(r.September)">@Fmt(r.September)</td>
+                                        <td class="@MonthClass(r.October)">@Fmt(r.October)</td>
+                                        <td class="@MonthClass(r.November)">@Fmt(r.November)</td>
+                                        <td class="@MonthClass(r.December)">@Fmt(r.December)</td>
+                                        <td class="total-col">@Fmt(r.Total)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Right: Chat Panel -->
+        <div class="chat-panel">
+            <div class="chat-header">
+                <div class="chat-title">
+                    Assistant
+                    <span class="chat-badge">AI</span>
+                </div>
+                <div class="chat-subtitle">Create, update, or delete budget categories using natural language.</div>
+            </div>
+
+            <div class="chat-messages">
+                @if (_messages.Count == 0)
+                {
+                    <div class="chat-welcome">
+                        <div class="welcome-icon">💬</div>
+                        <div class="welcome-text">Ask me to manage your budgets. Try one of these:</div>
+                        <div class="welcome-examples">
+                            <div class="example-chip" @onclick='() => SetPrompt("Create category Groceries with 6000 for 2025")'>
+                                "Create category Groceries with 6000 for 2025"
+                            </div>
+                            <div class="example-chip" @onclick='() => SetPrompt("Update Rent March to 1500")'>
+                                "Update Rent March to 1500"
+                            </div>
+                            <div class="example-chip" @onclick='() => SetPrompt("Delete category Utilities")'>
+                                "Delete category Utilities"
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var msg in _messages)
+                    {
+                        <div class="message-bubble message-ai @msg.CssClass">
+                            <div class="msg-label">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+                                BudgetAI
+                            </div>
+                            @msg.Text
+                        </div>
+
+                        @if (msg.ShowConfirmation)
+                        {
+                            <div class="confirm-actions">
+                                <button class="btn-confirm" @onclick="ConfirmYes" disabled="@_busy">Confirm</button>
+                                <button class="btn-cancel" @onclick="ConfirmNo" disabled="@_busy">Cancel</button>
+                            </div>
+                        }
+                    }
+                }
+            </div>
+
+            <div class="chat-input-area">
+                <div class="input-wrapper">
+                    <textarea class="chat-textarea"
+                              placeholder="Type a command... e.g. 'Create category Travel with 3000'"
+                              @bind="_prompt"
+                              @onkeydown="HandleKeyDown"
+                              disabled="@_busy"></textarea>
+                    <div class="input-footer">
+                        <span class="input-hint">@(_busy ? "Processing..." : "Enter to send")</span>
+                        <button class="btn-send" @onclick="Send" disabled="@_busy">
+                            @if (_busy)
+                            {
+                                <span>Sending&hellip;</span>
+                            }
+                            else
+                            {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                                <span>Send</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // ── DTOs ──
+    private sealed record BudgetPivotRowDto(
+        Guid CategoryId, string Category,
+        decimal January, decimal February, decimal March,
+        decimal April, decimal May, decimal June,
+        decimal July, decimal August, decimal September,
+        decimal October, decimal November, decimal December,
+        decimal Total);
+
+    private sealed record ChatRequest(string Prompt, bool Confirm = false);
+    private sealed record ChatResponse(string Message, bool NeedsConfirmation);
+
+    private sealed class ChatMessage
+    {
+        public string Text { get; init; } = "";
+        public string CssClass { get; init; } = "";
+        public bool ShowConfirmation { get; set; }
+    }
+
+    // ── State ──
+    private List<BudgetPivotRowDto>? _rows;
+    private int _year = DateTime.UtcNow.Year;
+    private string _prompt = "";
+    private bool _busy;
+    private string _lastPromptForConfirmation = "";
+    private List<ChatMessage> _messages = new();
+
+    // ── Lifecycle ──
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _rows = await Http.GetFromJsonAsync<List<BudgetPivotRowDto>>($"api/budgets/pivot?year={_year}");
+    }
+
+    // ── Helpers ──
+    private static string Fmt(decimal v) => v == 0 ? "—" : v.ToString("N0");
+    private static string MonthClass(decimal v) => v == 0 ? "zero" : "";
+
+    private void SetPrompt(string text)
+    {
+        _prompt = text;
+        StateHasChanged();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey && !_busy)
+        {
+            await Send();
+        }
+    }
+
+    // ── Chat Actions ──
+    private async Task Send()
+    {
+        if (string.IsNullOrWhiteSpace(_prompt)) return;
+
+        _busy = true;
+
+        // Clear any previous confirmation
+        foreach (var m in _messages) m.ShowConfirmation = false;
+
+        var req = new ChatRequest(_prompt, Confirm: false);
+        var resp = await Http.PostAsJsonAsync("api/chat", req);
+        var data = await resp.Content.ReadFromJsonAsync<ChatResponse>();
+
+        var message = data?.Message ?? "No response";
+        var needsConfirm = data?.NeedsConfirmation ?? false;
+
+        var cssClass = needsConfirm ? "" : (message.StartsWith("Created") || message.StartsWith("Updated") || message.StartsWith("Deleted") ? "success" : message.Contains("not found") || message.Contains("missing") || message.Contains("already exists") ? "error" : "");
+
+        var chatMsg = new ChatMessage
+        {
+            Text = message,
+            CssClass = cssClass,
+            ShowConfirmation = needsConfirm
+        };
+        _messages.Add(chatMsg);
+
+        if (needsConfirm)
+            _lastPromptForConfirmation = _prompt;
+
+        _prompt = "";
+        _busy = false;
+        await Load();
+    }
+
+    private async Task ConfirmYes()
+    {
+        _busy = true;
+
+        foreach (var m in _messages) m.ShowConfirmation = false;
+
+        var req = new ChatRequest(_lastPromptForConfirmation, Confirm: true);
+        var resp = await Http.PostAsJsonAsync("api/chat", req);
+        var data = await resp.Content.ReadFromJsonAsync<ChatResponse>();
+
+        _messages.Add(new ChatMessage
+        {
+            Text = data?.Message ?? "Done",
+            CssClass = "success"
+        });
+
+        _busy = false;
+        await Load();
+    }
+
+    private void ConfirmNo()
+    {
+        foreach (var m in _messages) m.ShowConfirmation = false;
+        _messages.Add(new ChatMessage
+        {
+            Text = "Action cancelled.",
+            CssClass = ""
+        });
+    }
+}
